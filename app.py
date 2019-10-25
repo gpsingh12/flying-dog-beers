@@ -1,63 +1,80 @@
+import pandas as pd
+import requests
+import json
+
+r = requests.get('https://data.cityofnewyork.us/resource/uvpi-gqnh.json')
+x = r.json()
+df = pd.read_json(json.dumps(x))
+df=pd.DataFrame(df)
+df1 =  df[['tree_id' ,'health','spc_common', 'boroname']] # select columns
+
+q1= df1.groupby(['boroname','spc_common', 'health'])['tree_id'].nunique().reset_index()
+
+q1['proportion'] = q1.groupby(['boroname', 'spc_common']).transform(lambda x: 100*(x/x.sum()))
+
+
 import dash
-import dash_core_components as dcc
 import dash_html_components as html
-import plotly.graph_objs as go
-
-########### Define your variables
-beers=['Chesapeake Stout', 'Snake Dog IPA', 'Imperial Porter', 'Double Dog IPA']
-ibu_values=[35, 60, 85, 75]
-abv_values=[5.4, 7.1, 9.2, 4.3]
-color1='lightblue'
-color2='darkgreen'
-mytitle='Beer Comparison'
-tabtitle='beer!'
-myheading='Flying Dog Beers'
-label1='IBU'
-label2='ABV'
-githublink='https://github.com/austinlasseter/flying-dog-beers'
-sourceurl='https://www.flyingdog.com/beers/'
-
-########### Set up the chart
-bitterness = go.Bar(
-    x=beers,
-    y=ibu_values,
-    name=label1,
-    marker={'color':color1}
-)
-alcohol = go.Bar(
-    x=beers,
-    y=abv_values,
-    name=label2,
-    marker={'color':color2}
-)
-
-beer_data = [bitterness, alcohol]
-beer_layout = go.Layout(
-    barmode='group',
-    title = mytitle
-)
-
-beer_fig = go.Figure(data=beer_data, layout=beer_layout)
+import dash_core_components as dcc
+from dash.dependencies import Input, Output
 
 
-########### Initiate the app
 external_stylesheets = ['https://codepen.io/chriddyp/pen/bWLwgP.css']
 app = dash.Dash(__name__, external_stylesheets=external_stylesheets)
+#app = dash.Dash(__name__)
 server = app.server
-app.title=tabtitle
+colors = {
+    'background': '#111111',
+    'text': '#7FDBFF'
+}
 
-########### Set up the layout
-app.layout = html.Div(children=[
-    html.H1(myheading),
-    dcc.Graph(
-        id='flyingdog',
-        figure=beer_fig
+app.layout = html.Div([
+    html.H2('NYC TREE HEALTH'),
+    html.Label("Choose a Species"),
+    dcc.Dropdown(
+        id='dropdown',
+        options=[{'label': i, 'value': i} for i in q1.spc_common.unique()],
+        value='American elm',
+        style={'width':'50%'}
     ),
-    html.A('Code on Github', href=githublink),
-    html.Br(),
-    html.A('Data Source', href=sourceurl),
-    ]
-)
+    html.Div(id='display-value'),
+    dcc.Graph( id="output-graph"),
+        
+])
+
+q1_1 = q1.loc[q1['health']=='Fair']
+q1_2 = q1.loc[q1['health']=='Good']
+q1_3 = q1.loc[q1['health']=='Poor']
+
+@app.callback(dash.dependencies.Output('output-graph', 'figure'),
+              [dash.dependencies.Input('dropdown', 'value')])
+            
+def update_value(value):
+
+  #  test =test[test['spc_common']=='value']
+    return({'data': [
+        {'x': q1_1.boroname.unique(), 'y': q1_1.loc[q1_1['spc_common']==value].proportion, 'type': 'bar', 'name': u'Fair'},
+        {'x': q1_2.boroname.unique(), 'y': q1_2.loc[q1_2['spc_common']==value].proportion, 'type': 'bar', 'name': u'Good'},
+        {'x': q1_3.boroname.unique(), 'y': q1_3.loc[q1_3['spc_common']==value].proportion, 'type': 'bar', 'name': u'Poor'},
+        ],
+            'layout': {
+                'title': 'Tree Health by Borough',
+                'plot_bgcolor':colors['background'],
+                'paper_bgcolor':colors['background'],
+              
+                'font': {
+                    'color':colors['text']
+                }
+        }
+           
+    }
+    )
+
+
+
+
+def display_value(value):
+    return 'You have selected "{}"'.format(value)
 
 if __name__ == '__main__':
     app.run_server()
